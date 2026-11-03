@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>나만의 영화 티어리스트</title>
+    <style>
+        /* 기본 스타일 및 반응형 설정 */
+        :root {
+            --bg-color: #121212;
+            --text-color: #ffffff;
+            --card-bg: #1e1e1e;
+            --tier-s: #ff7f7f;
+            --tier-a: #ffbf7f;
+            --tier-b: #ffff7f;
+            --tier-c: #7fff7f;
+        }
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.5;
+        }
+        h1, h2, h3 { margin-top: 0; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        
+        /* 헤더 및 공유 버튼 */
+        .header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
+        .btn { background-color: #6200ea; color: white; border: none; padding: 10px 15px; border-radius: 5px; cursor: pointer; font-weight: bold; }
+        .btn:hover { background-color: #3700b3; }
+        .read-only-badge { background-color: #cf6679; padding: 5px 10px; border-radius: 5px; font-size: 0.9em; display: none; }
+
+        /* 검색 영역 */
+        .search-section { margin-bottom: 30px; }
+        .search-input { width: 100%; padding: 12px; box-sizing: border-box; border-radius: 5px; border: 1px solid #333; background-color: #2c2c2c; color: white; font-size: 16px; }
+        
+        /* 영화 카드 리스트 (가로 스크롤) */
+        .movie-list { display: flex; gap: 15px; overflow-x: auto; padding: 10px 0; scroll-snap-type: x mandatory; }
+        .movie-card {
+            background-color: var(--card-bg); border-radius: 8px; min-width: 120px; width: 120px;
+            padding: 10px; cursor: pointer; scroll-snap-align: start; transition: transform 0.2s;
+            text-align: center; border: 1px solid #333;
+        }
+        .movie-card:hover { transform: translateY(-5px); border-color: #6200ea; }
+        .movie-poster { width: 100%; height: 150px; background-color: #444; border-radius: 4px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #aaa; }
+        .movie-title { font-size: 14px; font-weight: bold; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .movie-info { font-size: 11px; color: #bbb; }
+
+        /* 티어보드 영역 */
+        .tier-board { display: flex; flex-direction: column; gap: 10px; margin-bottom: 40px; }
+        .tier-row { display: flex; min-height: 140px; background-color: #1a1a1a; border-radius: 8px; overflow: hidden; border: 1px solid #333; }
+        .tier-label { width: 80px; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold; color: #000; flex-shrink: 0; }
+        .tier-s { background-color: var(--tier-s); }
+        .tier-a { background-color: var(--tier-a); }
+        .tier-b { background-color: var(--tier-b); }
+        .tier-c { background-color: var(--tier-c); }
+        .tier-content { display: flex; gap: 10px; padding: 10px; overflow-x: auto; flex-grow: 1; align-items: center; }
+        .tier-content .movie-card { min-width: 100px; width: 100px; }
+        .tier-content .movie-poster { height: 120px; }
+
+        /* 추천 영역 */
+        .recommendation-section { background-color: #1a1a1a; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        .rec-category { margin-bottom: 20px; }
+        
+        /* 모달 (티어 선택용) */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); justify-content: center; align-items: center; z-index: 1000; }
+        .modal { background-color: var(--card-bg); padding: 20px; border-radius: 10px; text-align: center; width: 80%; max-width: 300px; }
+        .modal-btn { display: block; width: 100%; margin: 10px 0; padding: 12px; background-color: #333; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        .modal-btn:hover { background-color: #555; }
+        .modal-btn.remove { background-color: #cf6679; }
+        .modal-btn.cancel { background-color: transparent; border: 1px solid #555; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>🎬 영화 티어리스트</h1>
+        <div>
+            <span id="readOnlyBadge" class="read-only-badge">읽기 전용 모드</span>
+            <button id="shareBtn" class="btn" onclick="shareTierList()">URL 공유하기</button>
+        </div>
+    </div>
+
+    <!-- 검색 영역 (읽기 전용일 때 숨김) -->
+    <div id="editSection">
+        <div class="search-section">
+            <input type="text" id="searchInput" class="search-input" placeholder="영화 제목을 검색하세요..." oninput="handleSearch()">
+            <div id="searchResults" class="movie-list"></div>
+        </div>
+    </div>
+
+    <!-- 티어보드 영역 -->
+    <h2>🏆 마이 티어보드</h2>
+    <div class="tier-board">
+        <div class="tier-row">
+            <div class="tier-label tier-s">S</div>
+            <div class="tier-content" id="tier-S"></div>
+        </div>
+        <div class="tier-row">
+            <div class="tier-label tier-a">A</div>
+            <div class="tier-content" id="tier-A"></div>
+        </div>
+        <div class="tier-row">
+            <div class="tier-label tier-b">B</div>
+            <div class="tier-content" id="tier-B"></div>
+        </div>
+        <div class="tier-row">
+            <div class="tier-label tier-c">C</div>
+            <div class="tier-content" id="tier-C"></div>
+        </div>
+    </div>
+
+    <!-- 추천 영역 -->
+    <div class="recommendation-section">
+        <h2>💡 영화 추천</h2>
+        <div class="rec-category">
+            <h3>🔥 인기순 추천</h3>
+            <div id="recPopular" class="movie-list"></div>
+        </div>
+        <div class="rec-category">
+            <h3>⭐ 리뷰순 추천</h3>
+            <div id="recReview" class="movie-list"></div>
+        </div>
+        <div class="rec-category">
+            <h3>🎭 기분별 추천 (킬링타임용)</h3>
+            <div id="recMood" class="movie-list"></div>
+        </div>
+    </div>
+</div>
+
+<!-- 모바일 친화적 티어 선택 모달 -->
+<div id="tierModal" class="modal-overlay">
+    <div class="modal">
+        <h3 id="modalMovieTitle">영화 제목</h3>
+        <p>어느 티어에 배치할까요?</p>
+        <button class="modal-btn" onclick="setTier('S')">S 티어</button>
+        <button class="modal-btn" onclick="setTier('A')">A 티어</button>
+        <button class="modal-btn" onclick="setTier('B')">B 티어</button>
+        <button class="modal-btn" onclick="setTier('C')">C 티어</button>
+        <button class="modal-btn remove" id="btnRemoveTier" onclick="setTier(null)" style="display:none;">티어에서 삭제</button>
+        <button class="modal-btn cancel" onclick="closeModal()">취소</button>
+    </div>
+</div>
+
+<script>
+    // 1. 초기 영화 데이터 (기획서 4-1, 4-2, 4-3 반영)
+    const movies = [
+        { id: 1, title: "기생충", year: 2019, genre: "드라마/스릴러", rating: 9.5, reviewStars: "★★★★★", popScore: 98, revScore: 95, mood: "생각할 거리 있는 것" },
+        { id: 2, title: "인터스텔라", year: 2014, genre: "SF", rating: 9.3, reviewStars: "★★★★★", popScore: 95, revScore: 92, mood: "생각할 거리 있는 것" },
+        { id: 3, title: "셔터 아일랜드", year: 2010, genre: "스릴러", rating: 8.8, reviewStars: "★★★★☆", popScore: 85, revScore: 88, mood: "킬링타임용" },
+        { id: 4, title: "삼총사", year: 2011, genre: "액션", rating: 7.5, reviewStars: "★★★☆☆", popScore: 70, revScore: 65, mood: "킬링타임용" },
+        { id: 5, title: "꿀알바", year: 2023, genre: "코미디", rating: 8.0, reviewStars: "★★★★☆", popScore: 75, revScore: 78, mood: "킬링타임용" },
+        { id: 6, title: "은중과 상연", year: 2024, genre: "드라마", rating: 8.5, reviewStars: "★★★★☆", popScore: 80, revScore: 85, mood: "울고싶을 때" },
+        { id: 7, title: "센과 치히로의 행방불명", year: 2001, genre: "애니메이션", rating: 9.6, reviewStars: "★★★★★", popScore: 99, revScore: 97, mood: "힐링하고 싶음" },
+        { id: 8, title: "인사이드 아웃", year: 2015, genre: "애니메이션", rating: 9.2, reviewStars: "★★★★★", popScore: 94, revScore: 90, mood: "울고싶을 때" },
+        { id: 9, title: "인턴", year: 2015, genre: "코미디/드라마", rating: 8.9, reviewStars: "★★★★☆", popScore: 88, revScore: 86, mood: "동기부여가 필요할때" },
+        { id: 10, title: "하울의 움직이는 성", year: 2004, genre: "애니메이션", rating: 9.4, reviewStars: "★★★★★", popScore: 96, revScore: 93, mood: "연애세포 자극하고 싶을때" },
+        { id: 11, title: "귀멸의 칼날:무한성", year: 2024, genre: "애니메이션/액션", rating: 9.0, reviewStars: "★★★★☆", popScore: 92, revScore: 89, mood: "킬링타임용" }
+    ];
+
+    // 상태 관리 변수
+    let userTiers = {}; // 예: { 1: 'S', 2: 'A' } (영화 ID를 키로, 티어를 값으로 저장)
+    let isReadOnly = false;
+    let selectedMovieId = null;
+
+    // 2. 초기화 함수 (URL 파라미터 확인 및 로컬 스토리지 로드)
+    function init() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const sharedData = urlParams.get('data');
+
+        if (sharedData) {
+            // 공유된 링크로 접속한 경우 (읽기 전용)
+            try {
+                // 한글 깨짐 방지를 위해 decodeURIComponent 사용
+                userTiers = JSON.parse(decodeURIComponent(atob(sharedData)));
+                isReadOnly = true;
+                document.getElementById('editSection').style.display = 'none';
+                document.getElementById('shareBtn').style.display = 'none';
+                document.getElementById('readOnlyBadge').style.display = 'inline-block';
+            } catch (e) {
+                alert("잘못된 공유 링크입니다.");
+            }
+        } else {
+            // 일반 접속인 경우 로컬 스토리지에서 불러오기
+            const saved = localStorage.getItem('movieTiers');
+            if (saved) {
+                userTiers = JSON.parse(saved);
+            }
+            renderSearch(movies); // 초기 검색 결과(전체) 렌더링
+        }
+
+        renderTierBoard();
+        renderRecommendations();
+    }
+
+    // 3. 영화 카드 HTML 생성 헬퍼 함수
+    function createMovieCard(movie, context) {
+        const card = document.createElement('div');
+        card.className = 'movie-card';
+        // 포스터 이미지가 없으므로 CSS로 대체
+        card.innerHTML = `
+            <div class="movie-poster">포스터<br>준비중</div>
+            <div class="movie-title" title="${movie.title}">${movie.title}</div>
+            <div class="movie-info">${movie.year} | ${movie.rating}</div>
+            <div class="movie-info">${movie.reviewStars}</div>
+        `;
+        
+        // 읽기 전용이 아닐 때만 클릭 이벤트 추가
+        if (!isReadOnly) {
+            card.onclick = () => openModal(movie.id, context);
+        }
+        return card;
+    }
+
+    // 4. 검색 기능
+    function handleSearch() {
+        const query = document.getElementById('searchInput').value.toLowerCase();
+        // 기획서 미정 사항: 현재는 '제목' 기준으로만 검색되도록 구현
+        const filtered = movies.filter(m => m.title.toLowerCase().includes(query));
+        renderSearch(filtered);
+    }
+
+    function renderSearch(movieList) {
+        const container = document.getElementById('searchResults');
+        container.innerHTML = '';
+        // 티어에 이미 배치된 영화는 검색 결과에서 제외 (한 영화는 한 티어에만)
+        const unassignedMovies = movieList.filter(m => !userTiers[m.id]);
+        
+        if (unassignedMovies.length === 0) {
+            container.innerHTML = '<div style="padding: 20px; color: #888;">검색 결과가 없거나 모두 티어에 배치되었습니다.</div>';
+            return;
+        }
+
+        unassignedMovies.forEach(movie => {
+            container.appendChild(createMovieCard(movie, 'search'));
+        });
+    }
+
+    // 5. 티어보드 렌더링
+    function renderTierBoard() {
+        // S, A, B, C 컨테이너 초기화
+        ['S', 'A', 'B', 'C'].forEach(tier => {
+            document.getElementById(`tier-${tier}`).innerHTML = '';
+        });
+
+        // userTiers 객체를 순회하며 영화 배치
+        Object.keys(userTiers).forEach(movieId => {
+            const tier = userTiers[movieId];
+            const movie = movies.find(m => m.id == movieId);
+            if (movie && document.getElementById(`tier-${tier}`)) {
+                document.getElementById(`tier-${tier}`).appendChild(createMovieCard(movie, 'tier'));
+            }
+        });
+    }
+
+    // 6. 모달 제어 (모바일 친화적 탭 방식)
+    function openModal(movieId, context) {
+        selectedMovieId = movieId;
+        const movie = movies.find(m => m.id == movieId);
+        document.getElementById('modalMovieTitle').innerText = movie.title;
+        
+        // 티어에 이미 있는 영화를 클릭한 경우 '삭제' 버튼 표시
+        if (context === 'tier') {
+            document.getElementById('btnRemoveTier').style.display = 'block';
+        } else {
+            document.getElementById('btnRemoveTier').style.display = 'none';
+        }
+        
+        document.getElementById('tierModal').style.display = 'flex';
+    }
+
+    function closeModal() {
+        document.getElementById('tierModal').style.display = 'none';
+        selectedMovieId = null;
+    }
+
+    // 7. 티어 설정 및 저장
+    function setTier(tier) {
+        if (!selectedMovieId) return;
+
+        if (tier === null) {
+            // 삭제 처리
+            delete userTiers[selectedMovieId];
+        } else {
+            // 추가 또는 이동 (기존에 있어도 덮어씌워지므로 중복 방지됨)
+            userTiers[selectedMovieId] = tier;
+        }
+
+        // 로컬 스토리지 저장
+        localStorage.setItem('movieTiers', JSON.stringify(userTiers));
+        
+        closeModal();
+        handleSearch(); // 검색 목록 갱신
+        renderTierBoard(); // 티어보드 갱신
+    }
+
+    // 8. 추천 기능 렌더링
+    function renderRecommendations() {
+        // 인기순 추천 (popScore 내림차순)
+        const popSorted = [...movies].sort((a, b) => b.popScore - a.popScore).slice(0, 5);
+        const popContainer = document.getElementById('recPopular');
+        popSorted.forEach(m => popContainer.appendChild(createMovieCard(m, 'rec')));
+
+        // 리뷰순 추천 (revScore 내림차순)
+        const revSorted = [...movies].sort((a, b) => b.revScore - a.revScore).slice(0, 5);
+        const revContainer = document.getElementById('recReview');
+        revSorted.forEach(m => revContainer.appendChild(createMovieCard(m, 'rec')));
+
+        // 기분별 추천 (예시로 '킬링타임용' 필터링)
+        const moodFiltered = movies.filter(m => m.mood === "킬링타임용");
+        const moodContainer = document.getElementById('recMood');
+        moodFiltered.forEach(m => moodContainer.appendChild(createMovieCard(m, 'rec')));
+    }
+
+    // 9. URL 공유 기능 (읽기 전용)
+    function shareTierList() {
+        if (Object.keys(userTiers).length === 0) {
+            alert("티어보드에 영화를 먼저 추가해주세요!");
+            return;
+        }
+        
+        // 데이터를 JSON 문자열로 변환 -> 한글 인코딩 -> Base64 인코딩
+        const dataString = btoa(encodeURIComponent(JSON.stringify(userTiers)));
+        
+        // 현재 URL의 기본 주소에 파라미터 추가
+        const baseUrl = window.location.href.split('?')[0];
+        const shareUrl = `${baseUrl}?data=${dataString}`;
+
+        // 클립보드 복사
+        navigator.clipboard.writeText(shareUrl).then(() => {
+            alert("공유 링크가 클립보드에 복사되었습니다!\n친구에게 붙여넣기(Ctrl+V)해서 공유해보세요.");
+        }).catch(err => {
+            // 클립보드 권한이 없는 구형 브라우저 대응
+            prompt("아래 링크를 복사하여 공유하세요:", shareUrl);
+        });
+    }
+
+    // 앱 시작
+    init();
+
+</script>
+</body>
+</html>

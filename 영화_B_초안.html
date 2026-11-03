@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>영화 티어 메이커</title>
+    <style>
+        /* 다크 테마 및 기본 스타일 설정 */
+        body { 
+            background-color: #121212; 
+            color: #ffffff; 
+            font-family: 'Malgun Gothic', sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+        }
+        
+        .header { 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            margin-bottom: 20px; 
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+        }
+
+        .header h1 { margin: 0; font-size: 24px; }
+
+        button { 
+            padding: 8px 16px; 
+            cursor: pointer; 
+            background: #333; 
+            color: #fff; 
+            border: 1px solid #555; 
+            border-radius: 5px; 
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover { background: #555; }
+        button.share-btn { background: #4CAF50; border-color: #4CAF50; }
+        button.share-btn:hover { background: #45a049; }
+
+        /* 티어보드 레이아웃 */
+        .tier-row { 
+            display: flex; 
+            margin-bottom: 10px; 
+            background: #1e1e1e; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            min-height: 110px; 
+            border: 1px solid #333;
+        }
+        
+        /* 티어별 라벨 색상 (S=금, A=초록, B=파랑, C=회색) */
+        .tier-label { 
+            width: 100px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 28px; 
+            font-weight: bold; 
+            color: #000; 
+            text-shadow: 1px 1px 2px rgba(255,255,255,0.3);
+        }
+        .tier-S { background: #FFD700; }
+        .tier-A { background: #4CAF50; }
+        .tier-B { background: #2196F3; }
+        .tier-C { background: #9E9E9E; }
+
+        /* 드래그 앤 드롭 영역 */
+        .tier-list { 
+            flex: 1; 
+            display: flex; 
+            flex-wrap: wrap; 
+            padding: 10px; 
+            gap: 10px; 
+            transition: background 0.2s;
+        }
+        .tier-list.drag-over { background: rgba(255, 255, 255, 0.05); }
+
+        /* 대기열 (Unranked) 영역 */
+        .pool-container { 
+            margin-top: 30px; 
+            padding: 15px; 
+            background: #1e1e1e; 
+            border-radius: 8px; 
+            min-height: 150px; 
+            border: 1px dashed #555;
+        }
+        .pool-container h3 { margin-top: 0; color: #aaa; font-size: 16px; }
+
+        /* 영화 카드 UI */
+        .movie-card { 
+            background: #2c2c2c; 
+            padding: 10px; 
+            border-radius: 6px; 
+            cursor: grab; 
+            width: 110px; 
+            height: 70px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center; 
+            user-select: none; 
+            border: 1px solid #444;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: transform 0.1s;
+        }
+        .movie-card:active { cursor: grabbing; transform: scale(0.95); }
+        .movie-title { font-weight: bold; margin-bottom: 6px; font-size: 14px; word-break: keep-all; }
+        .movie-meta { font-size: 11px; color: #aaa; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🎬 영화 티어 메이커</h1>
+        <div>
+            <button class="share-btn" onclick="shareTier()">공유하기 (URL 복사)</button>
+            <button onclick="resetTier()">초기화</button>
+        </div>
+    </div>
+
+    <!-- 티어 보드 영역 -->
+    <div id="tier-board">
+        <!-- 자바스크립트로 자동 생성됩니다 -->
+    </div>
+
+    <!-- 대기열 (평가 안 된 영화들) -->
+    <div class="pool-container">
+        <h3>대기열 (여기로 드래그하여 티어 제외)</h3>
+        <div id="unranked" class="tier-list" style="min-height: 100px;"></div>
+    </div>
+
+    <script>
+        // 1. 더미 데이터 구성 (11개 영화, 임의의 개봉연도 및 장르)
+        const movies = [
+            { id: 'm1', title: '기생충', year: 2019, genre: '스릴러' },
+            { id: 'm2', title: '올드보이', year: 2003, genre: '드라마' },
+            { id: 'm3', title: '범죄도시', year: 2017, genre: '액션' },
+            { id: 'm4', title: '명량', year: 2014, genre: '사극' },
+            { id: 'm5', title: '신과함께', year: 2017, genre: '판타지' },
+            { id: 'm6', title: '아바타', year: 2009, genre: 'SF' },
+            { id: 'm7', title: '인터스텔라', year: 2014, genre: 'SF' },
+            { id: 'm8', title: '어벤져스', year: 2012, genre: '액션' },
+            { id: 'm9', title: '타이타닉', year: 1997, genre: '로맨스' },
+            { id: 'm10', title: '매트릭스', year: 1999, genre: 'SF' },
+            { id: 'm11', title: '인셉션', year: 2010, genre: 'SF' }
+        ];
+
+        const tiers = ['S', 'A', 'B', 'C'];
+        
+        // 앱의 현재 상태를 저장하는 객체
+        let state = { 
+            unranked: movies.map(m => m.id), 
+            S: [], A: [], B: [], C: [] 
+        };
+
+        // 2. 초기화 함수
+        function init() {
+            // URL에 공유된 데이터(Base64)가 있는지 확인
+            const urlParams = new URLSearchParams(window.location.search);
+            const sharedData = urlParams.get('data');
+            
+            if (sharedData) {
+                try {
+                    state = JSON.parse(atob(sharedData));
+                    // 데이터 로드 후 URL을 깔끔하게 정리
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                } catch (e) {
+                    alert('유효하지 않은 공유 링크입니다. 기존 저장 데이터를 불러옵니다.');
+                    loadLocal();
+                }
+            } else {
+                // 공유 링크가 없으면 로컬 스토리지 확인
+                loadLocal();
+            }
+
+            renderBoard();
+            renderMovies();
+        }
+
+        // 3. 로컬 스토리지 로드 및 저장
+        function loadLocal() {
+            const saved = localStorage.getItem('movieTierState');
+            if (saved) {
+                state = JSON.parse(saved);
+            }
+        }
+
+        function saveState() {
+            localStorage.setItem('movieTierState', JSON.stringify(state));
+        }
+
+        // 4. 티어 보드 UI 렌더링
+        function renderBoard() {
+            const board = document.getElementById('tier-board');
+            board.innerHTML = '';
+            
+            tiers.forEach(tier => {
+                const row = document.createElement('div');
+                row.className = 'tier-row';
+                row.innerHTML = `
+                    <div class="tier-label tier-${tier}">${tier}</div>
+                    <div id="${tier}" class="tier-list"></div>
+                `;
+                board.appendChild(row);
+            });
+
+            // 모든 드롭 영역(티어 + 대기열)에 이벤트 리스너 추가
+            document.querySelectorAll('.tier-list').forEach(list => {
+                list.addEventListener('dragover', e => {
+                    e.preventDefault(); // 드롭 허용
+                    list.classList.add('drag-over');
+                });
+                list.addEventListener('dragleave', e => {
+                    list.classList.remove('drag-over');
+                });
+                list.addEventListener('drop', handleDrop);
+            });
+        }
+
+        // 5. 영화 카드 렌더링
+        function renderMovies() {
+            // 렌더링 전 모든 리스트 비우기
+            document.querySelectorAll('.tier-list').forEach(list => list.innerHTML = '');
+
+            // state 객체를 순회하며 알맞은 위치에 영화 카드 배치
+            Object.keys(state).forEach(tierKey => {
+                const container = document.getElementById(tierKey);
+                if (!container) return;
+
+                state[tierKey].forEach(movieId => {
+                    const movie = movies.find(m => m.id === movieId);
+                    if (!movie) return;
+
+                    const card = document.createElement('div');
+                    card.className = 'movie-card';
+                    card.draggable = true;
+                    card.id = movie.id;
+                    card.innerHTML = `
+                        <div class="movie-title">${movie.title}</div>
+                        <div class="movie-meta">${movie.year} | ${movie.genre}</div>
+                    `;
+                    
+                    // 드래그 시작 시 데이터 저장
+                    card.addEventListener('dragstart', e => {
+                        e.dataTransfer.setData('text/plain', movie.id);
+                        e.dataTransfer.setData('source-tier', tierKey);
+                    });
+
+                    container.appendChild(card);
+                });
+            });
+        }
+
+        // 6. 드롭 처리 로직
+        function handleDrop(e) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('drag-over');
+            
+            const movieId = e.dataTransfer.getData('text/plain');
+            const sourceTier = e.dataTransfer.getData('source-tier');
+            const targetTier = e.currentTarget.id;
+
+            // 같은 위치에 드롭한 경우 무시
+            if (sourceTier === targetTier) return;
+
+            // 이전 티어에서 제거하고 새 티어에 추가
+            state[sourceTier] = state[sourceTier].filter(id => id !== movieId);
+            state[targetTier].push(movieId);
+
+            saveState(); // 로컬 스토리지 자동 저장
+            renderMovies(); // 화면 갱신
+        }
+
+        // 7. Base64 URL 공유 기능
+        function shareTier() {
+            // 현재 상태를 JSON 문자열로 바꾼 뒤 Base64로 인코딩
+            const base64State = btoa(JSON.stringify(state));
+            const shareUrl = `${window.location.origin}${window.location.pathname}?data=${base64State}`;
+            
+            // 클립보드 복사
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                alert('✅ 공유 링크가 클립보드에 복사되었습니다!\n친구에게 링크를 보내보세요.');
+            }).catch(err => {
+                // 클립보드 API가 막혀있을 경우를 대비한 폴백
+                prompt('아래 링크를 복사하여 공유하세요:', shareUrl);
+            });
+        }
+
+        // 8. 초기화 기능
+        function resetTier() {
+            if(confirm('모든 티어 배치를 초기화하시겠습니까?')) {
+                state = { unranked: movies.map(m => m.id), S: [], A: [], B: [], C: [] };
+                saveState();
+                renderMovies();
+            }
+        }
+
+        // 앱 실행
+        init();
+    </script>
+</body>
+</html>
